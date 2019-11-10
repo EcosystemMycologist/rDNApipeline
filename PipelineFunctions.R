@@ -14,42 +14,10 @@ library("foreach")
 library("doParallel")
 library(vegan)
 
-##General purpose functions:
+############################################
+## General purpose DNA manipulation functions
+############################################
 
-setPaths <- function(user = Sys.info()[7])
-    {
-    ##Convenience function used to set the paths to software based on the user.
-    ##Define the code necessary to run usearch, vsearch, cutadapt, and blast plus the paths for blast database directory.
-    if(user=="dickiei")
-        {
-        paths <- list(usearch="usearch",
-                      vsearch="~/vsearch-2.3.0-osx-x86_64/bin/vsearch",
-                      cutadapt = "cutadapt", 
-                      blast = "/Users/dickiei/BLAST/bin/blastn",
-                      dbPath = "/Users/dickiei/BLAST/db/")
-        system("export PATH=$PATH:~/vsearch-2.3.0-osx-x86_64/bin/")  ##This seemed necessary on my MacPro, probably due to
-                                                                     ##mistake in installation of vsearch.
-        }
-    if(user=="andi")
-        {
-        paths <- list(usearch="~/NGSprograms/usearchv9/usearch9.0.2132_i86linux32",
-                      vsearch="~/NGSprograms/vsearch-2.3.0/bin/vsearch",
-                      cutadapt = "~/.local/bin/cutadapt", 
-                      blast = "~/BLAST/ncbi-blast-2.5.0+/bin/blastn",
-                      dbPath = "~/BLAST/ncbi-blast-2.5.0+/db/")
-        }
-     else 
-        {
-        paths <- list(usearch="/share/apps/usearch/usearch",
-                      vsearch="/share/apps/vsearch/bin/vsearch",
-                      cutadapt="/usr/bin/cutadapt",
-                      blast="/usr/bin/blastn",
-                      dbPath="/data/people/ecoMyc/blastdb/")
-        }
-     return(paths)
-     }
-     
-     
 writeFast <- function(seqs, desc, file="Temp.fasta")
     #Much faster function to write a fasta-like format without any line breaks within sequences
     {
@@ -139,7 +107,7 @@ iupacAgrep <- function(pattern, x, ...)
     }
     
 #DNA functions to reverse or reverse-complement strings
-strrev <- function(x) paste(rev(strsplit(x, "")[[1]]), collapse = "")
+strrev <- function(x) paste(rev(strsplit(x, "")[[1]]), collapse = "") #Reverse any string of letters
 
 strcomp <- function(x) paste(c("A","T","G","C","Y","R","S","W","K","M","B","D","H","V","N", ".")[match(strsplit(x, "")[[1]], 
                                 c("T","A","C","G","R","Y","S","W","M","K","V","H","D","B","N", "." ))], collapse = "")
@@ -157,9 +125,9 @@ CollapseHomopolys <- function(x)
     x
     }
 
-
 extractFASTA <- function(file, ids, outfile="output.fsa")
-    ##Not sure if this is used.  I think it is primarily for dealing with odd characters in FASTA file headers
+    ##Not sure if this is used. It lacked good documentation, but
+    ##I think it is primarily for dealing with odd characters in FASTA file headers
     {
     in.file <- readLines(file,  encoding="latin1")
     in.file <- iconv(in.file, from="latin1", to="ASCII", ".")
@@ -174,14 +142,49 @@ extractFASTA <- function(file, ids, outfile="output.fsa")
         }
     write(write.lines, file=outfile)
     }
-  
 
 ### Pipeline functions
 
+setPaths <- function(user = Sys.info()[7])
+    {
+    ##Convenience function used to set the paths to software based on the user.
+    ##Define the code necessary to run usearch, vsearch, cutadapt, and blast plus the paths for blast database directory.
+    ##Pretty specific to my computers and computers of my colleagues who use my pipeline. Note that the
+    ##final "else" set is for the University of Canterbury Abacus cluster.
+     if(user=="dickiei")
+        {
+        paths <- list(usearch="usearch",
+                      vsearch="~/vsearch-2.3.0-osx-x86_64/bin/vsearch",
+                      cutadapt = "cutadapt", 
+                      blast = "/Users/dickiei/BLAST/bin/blastn",
+                      dbPath = "/Users/dickiei/BLAST/db/")
+        system("export PATH=$PATH:~/vsearch-2.3.0-osx-x86_64/bin/")  ##This seemed necessary on my MacPro, probably due to
+                                                                     ##mistake in installation of vsearch.
+        }
+    if(user=="andi")
+        {
+        paths <- list(usearch="~/NGSprograms/usearchv9/usearch9.0.2132_i86linux32",
+                      vsearch="~/NGSprograms/vsearch-2.3.0/bin/vsearch",
+                      cutadapt = "~/.local/bin/cutadapt", 
+                      blast = "~/BLAST/ncbi-blast-2.5.0+/bin/blastn",
+                      dbPath = "~/BLAST/ncbi-blast-2.5.0+/db/")
+        }
+     else 
+        {
+        paths <- list(usearch="/share/apps/usearch/usearch",
+                      vsearch="/share/apps/vsearch/bin/vsearch",
+                      cutadapt="/usr/bin/cutadapt",
+                      blast="/usr/bin/blastn",
+                      dbPath="/data/people/ecoMyc/blastdb/")
+        }
+     return(paths)
+     }
+     
 movefiles <- function(from, to, rootdir = "")
-    ##from is a vector of the directories where raw sequences are currently held
-    ##to the directory where sequences should be put.
-    ##root dir is pasted onto the front of from and to.
+    ## Move files from one directory to another
+    ## from is a vector of the directories where raw sequences are currently held
+    ## to the directory where sequences should be put.
+    ## root dir is pasted onto the front of from and to.
     {
     for(i in from)
         {
@@ -191,31 +194,42 @@ movefiles <- function(from, to, rootdir = "")
         }
     }
 
-
-##Ignore RunVparse   
+systemP <- function(x)
+    { ## Runs any command x but first prints the command to screen. Useful if using paste to build commands.
+    print(x)
+    system(x)
+    }
+    
 runVparse <- function(dir, forwardPrimer, reversePrimer, maxee = 1.0, minseqlength = 200, minsize = 2, paths=NULL, skipMerge = FALSE)
-    {
+    {  
+    ## The main pipeline function in my code, this will run: usearch -fastq_mergepairs, vsearch -fastq_filter, vsearch -derep_fulllength
+    ## and then form both Zero-radius OTUs (zotus) and OTUs.
     if(is.null(paths))
         {
         paths <- setPaths()
         }
-    system(paste("cd", dir))
+    systemP(paste("cd", dir))
     if(!skipMerge)
 	{
-	system(paste(paths$usearch, " -fastq_mergepairs ", dir,"*_R1.fastq  -fastqout ", dir,"merged_reads.fq -fastqout_notmerged_fwd ", dir,"notmerged_fwd.fastq -relabel @",sep=""))
+	systemP(paste(paths$usearch, " -fastq_mergepairs ", dir,"*_R1.fastq  -fastqout ", dir,"merged_reads.fq -fastqout_notmerged_fwd ", dir,"notmerged_fwd.fastq -relabel @",sep=""))
     	}
-    system(paste(paths$cutadapt, " -g ^", forwardPrimer, " -o  ", dir,"trimmed_merged_reads.fq  ", dir,"merged_reads.fq", sep=""))
-    system(paste(paths$cutadapt, " -a ", strrevcomp(reversePrimer), " -o ", dir,"trimmed_merged_reads2.fq  ", dir,"trimmed_merged_reads.fq", sep=""))
-    system(paste(paths$vsearch," -fastq_filter ",dir,"trimmed_merged_reads2.fq -fastq_maxee ",maxee," -relabel Filt -fastaout  ",dir,"filtered_merged_reads.fa", sep=""))   
-    system(paste(paths$vsearch," -derep_fulllength  ",dir,"filtered_merged_reads.fa -relabel Uniq --minseqlength ", minseqlength," -sizeout -fastaout  ",dir,"uniques.fa -output ",dir,"uniques.fa", sep= ""))
-    system(paste(paths$usearch, " -cluster_otus ", dir,"uniques.fa -minsize ", minsize," -otus ", dir, "otus.fa -relabel Otu -uparseout ",dir,"uparse.out.txt", sep=""))
-    system(paste(paths$vsearch," --fastq_filter  ",dir,"trimmed_merged_reads2.fq  --fastaout ",dir,"trimmed_merged_reads2.fa",sep=""))
-    system(paste(paths$vsearch," --usearch_global ",dir,"trimmed_merged_reads2.fa -db ", dir, "otus.fa -strand plus -id 0.97 --blast6out ", dir, "sequence_match_to_Otus.txt",sep=""))
+    systemP(paste(paths$vsearch," -fastq_filter ",dir,"merged_reads.fq -fastq_maxee ",maxee," -relabel Filt -fastaout  ",dir,"filtered_merged_reads.fa", sep=""))   
+    systemP(paste(paths$vsearch," -derep_fulllength  ",dir,"filtered_merged_reads.fa -relabel Uniq --minseqlength ", minseqlength," -sizeout -output  ",dir,"uniques.fa -output ",dir,"uniques.fa", sep= ""))
+    ## New unoise functions added to get zero-radius OTUs while still removing chimeras: (see: https://github.com/torognes/vsearch/pull/283 and https://drive5.com/usearch/manual/faq_uparse_or_unoise.html)
+    systemP(paste(paths$vsearch, " --cluster_unoise ", dir ,"uniques.fa --centroids ", dir ,"zotus_chim.fa", sep =""))
+    systemP(paste(paths$vsearch, " --sortbysize ", dir ,"zotus_chim.fa --output ", dir ,"zotus_sorted.fa", sep=""))
+    systemP(paste(paths$vsearch, " --uchime_denovo ", dir ,"zotus_sorted.fa --abskew 16 --nonchimeras ", dir ,"zotus.fa", sep=""))
+    ## cluster Otus
+    systemP(paste(paths$usearch, " -cluster_otus ", dir,"uniques.fa -minsize ", minsize," -otus ", dir, "otus.fa -relabel Otu -uparseout ",dir,"uparse.out.txt", sep=""))
+    systemP(paste(paths$vsearch," --fastq_filter  ",dir,"merged_reads.fq  --fastaout ",dir,"merged_reads.fa",sep=""))
+    systemP(paste(paths$vsearch," --usearch_global ",dir,"merged_reads.fa -db ", dir, "otus.fa -strand plus -id 0.97 --blast6out ", dir, "sequence_match_to_Otus.txt",sep=""))
+    ## match sequences to Otus
+    systemP(paste(paths$vsearch," --usearch_global ",dir,"merged_reads.fa -db ", dir, "zotus.fa -strand plus -id 1 --blast6out ", dir, "sequence_match_to_Zotus.txt",sep=""))
     }
-
     
 runBlastOnOtus <- function(dir, OtusFasta, database, cores=NULL)
     {
+    #Take OTUs and identify their best match using BLASTn.
     if(is.null(cores))
         {
         cores <- detectCores()-1
