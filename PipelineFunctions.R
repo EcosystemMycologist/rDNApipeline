@@ -278,7 +278,8 @@ collectBlastRes <- function(dir, OtusFasta, database, cores=NULL)
        
     for(core.i in 1:cores)
         {  
-        temp <- append(temp, readLines(paste(dir, "OTU_Blast_matching", core.i, ".txt", sep="")))
+        temp <- append(temp, 
+        Lines(paste(dir, "OTU_Blast_matching", core.i, ".txt", sep="")))
         }
     matches <- grep("# 1 hits found", temp)+1
     df <- (data.frame(matrix(unlist(strsplit(temp[matches], "\t")), byrow=TRUE, ncol=length(unlist(strsplit(temp[matches][1], "\t")))), stringsAsFactors=FALSE)[,c(1:4,11,12)])
