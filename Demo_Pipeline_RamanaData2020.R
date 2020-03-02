@@ -181,6 +181,7 @@ rsync -av iad31@abacus:/share/data/people/iad31/RamanaAMF2020/RamanaDemo_uparse_
 
 #########################################################################
 ### In R on home computer
+load('/Users/dickiei/RamanaDemo_uparse_2020-01-29_small_3')
 
 fungiOtus$length <- as.numeric(fungiOtus$length)
 fungiOtus$identity <- as.numeric(fungiOtus$identity )
@@ -216,6 +217,7 @@ plot(rowSums(fungiResMclean), rowSums(fungiResMclean>0))
 plot(fungiOtusClean$identity~fungiOtusClean$length, cex=sqrt(fungiOtusClean$abundance)/50)
 plot(fungiOtusClean$dominance~fungiOtusClean$frequency, log="xy")
 
-
-plot(fungiOtusClean$dominance~fungiOtusClean$frequency, log="xy", pch=16, col=rainbow(10)[as.numeric(fungiOtusClean$Family)])
-legend(1,3,levels(fungiOtusClean$Family), pch=16, col=rainbow(10), xpd=NA)
+fungiOtusClean$Family <- as.factor(as.character(fungiOtusClean$Family))
+plot(fungiOtusClean$dominance~fungiOtusClean$frequency, log="xy", pch=16, 
+    col=rainbow(10)[as.numeric(fungiOtusClean$Family)], bty="n")
+legend(1,2,levels(fungiOtusClean$Family), pch=16, col=rainbow(10), xpd=NA, bty="n")
